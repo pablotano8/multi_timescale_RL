@@ -18,10 +18,10 @@ DEFAULT_ENV_NAME = "LunarLander-v2"
 NUM_FRAMES_PER_EXPERIMENT = 50_000
 
 BATCH_SIZE = 32
-REPLAY_SIZE = 200000 #15000
-LEARNING_RATE = 1e-3 #1e-4
+REPLAY_SIZE = 20000 
+LEARNING_RATE = 1e-3
 SYNC_TARGET_FRAMES = 1000
-REPLAY_START_SIZE = 10000 #200000
+REPLAY_START_SIZE = 10000
 
 EPSILON_DECAY_LAST_FRAME = 40000
 EPSILON_START = 1.0
@@ -31,10 +31,8 @@ EPSILON_FINAL = 0.01
 NUM_GAMMAS=25
 taus=np.linspace(0,100,NUM_GAMMAS)
 GAMMAS=np.exp(-1/taus)
-GAMMAS[-1]=0.99
-
-
-GAMMAS=np.flip(GAMMAS)
+GAMMAS[-1]=0.99 # The behavioral gamma will be gamma=0.99
+GAMMAS=np.flip(GAMMAS) # The index of the behavioral gamma is 0
 
 
 Experience = collections.namedtuple(
@@ -161,15 +159,16 @@ def calc_loss(batch, net, tgt_net, device="cpu",individual=False):
     done_mask=done_mask.repeat(NUM_GAMMAS,1).T
 
     gammas=np.tile(GAMMAS,(len(rewards),1))
-    gammas=np.float32(gammas)
-    gammas=torch.tensor(gammas).to(device)
+    gammas=torch.tensor(np.float32(gammas)).to(device)
 
     rewards_v[done_mask] = -1
 
     with torch.no_grad():
         output_next=tgt_net(next_states_v)
         output_next=output_next.reshape(len(rewards),NUM_GAMMAS,env.action_space.n)
-
+        
+        # To compute the Q-value of the next state, we use, for every gamma, the action that was actually implemented
+        # in the environment, i.e. the argmax action of the behavioral gamma (index 0)
         best_action=torch.argmax(output_next[:,0,:],dim=-1)
 
         next_state_values=output_next[range(0,len(rewards)),:,best_action]
@@ -181,10 +180,9 @@ def calc_loss(batch, net, tgt_net, device="cpu",individual=False):
     expected_state_action_values=next_state_values * gammas + \
                                    rewards_v
 
-    if individual==False:
-        return nn.SmoothL1Loss()(state_action_values,expected_state_action_values)
-    
-    else:
+    if individual==False: #Average loss across gammas (used to trained the net)
+        return nn.SmoothL1Loss()(state_action_values,expected_state_action_values) 
+    else: #Individual loss for each gamma (used to compute the learning advantage)
         return nn.SmoothL1Loss(reduction='none')(state_action_values,expected_state_action_values)
 
 
@@ -280,60 +278,66 @@ if __name__ == "__main__":
         old_net = DQN(env.observation_space.shape[0],
                                     env.action_space.n).to(device)
 
-        weights=[]; unnorm_weights=[]; pos=[]; rewards=[]; height= []
+        learning_advantage=[]; unnorm_weights=[]; pos=[]; rewards=[]; height= []
         for it in range(300):
             if it%50==0:
                 print(it)
             agent.play_step(net, epsilon, device=device,learning=False)
-            
-            BATCH_SIZE=32
+
+            # choose random states
             start_index = np.random.choice(range(0,len(buffer)-BATCH_SIZE))
             batch_ind = buffer.ordered_sample(start_index,start_index+BATCH_SIZE)
             
-            actions=batch_ind[1]; states=batch_ind[0]; reward=batch_ind[2]
+            # Get elements from batch
+            states=batch_ind[0]
+            actions=batch_ind[1] #Actions that were actually implemented in the env (to compute behavioral Q-values)
+            reward=batch_ind[2]
+
             rewards.append(reward)
 
+            # Transform states to tensors
             states_v = torch.tensor(np.float32(np.array(
                 states, copy=False))).to(device)
 
+            # Get behavioral Q-values before backpropagating
             output_old=net(states_v)
             old_q_vals=(output_old[range(0,len(actions)),actions]).detach().to('cpu').numpy()
 
+            # Compute learning advantage independently for each gamma
             ratio, delta =[], []
             for gamma in range(0,len(GAMMAS)):
+                # Reset optimizer
                 optimizer_aux=torch.optim.Adam(old_net.parameters(), lr=LEARNING_RATE)
                 optimizer_aux.zero_grad()
                 
+                # Backpropagate to get the network AFTER backpropagation for a single gamma
                 old_net.load_state_dict(net.state_dict()); 
                 old_net.zero_grad()
-                    
-                loss = calc_loss(batch_ind, old_net, net, device=device,individual=True)
-                ind_loss=loss.mean(0)[gamma]
+                loss = calc_loss(batch_ind, old_net, net, device=device,individual=True) # Loss for each gamma individually
+                ind_loss=loss.mean(0)[gamma] # Use only the gamma-element of the loss
                 ind_loss.backward(retain_graph=True)
-
                 optimizer_aux.step()
                 
-
+                # Get behavioral Q-values after backpropagation
+                # Note that the argmax action can change after backprop, so we need to compute the max again
                 output=old_net(states_v).reshape(len(actions),NUM_GAMMAS,env.action_space.n)
-                
                 new_q_vals=torch.max(output[range(0,len(actions)),0:1,0:env.action_space.n],2).values.detach().to('cpu').numpy()
-                
 
+                # Get the average unnormalized learning advantage (we call it 'ratio')
                 delta.append(np.array(new_q_vals)-np.array(old_q_vals))
-
                 ratio.append(np.array((np.sum(delta[gamma])/BATCH_SIZE)))
 
+            # Normalize 'ratio' to get the learning advantage
             ratio=ratio-np.mean(ratio)
-            weights.append(ratio)
+            learning_advantage.append(ratio)
+
+            # Get the height of the rocket in each state, to separately compute LA
+            # when the rocket is close or far to the landing site
             height.append(np.mean(states,0)[1])
 
-
-        dif_high = [w for i,w in enumerate(weights) if height[i]>np.median(height)]
-        dif_low = [w for i,w in enumerate(weights) if height[i]<np.median(height)]
-
-        # plt.figure
-        # plt.plot(height)
-        # plt.show()
+        # Learning advantage when the rocket is high and low
+        dif_high = [w for i,w in enumerate(learning_advantage) if height[i]>np.median(height)]
+        dif_low = [w for i,w in enumerate(learning_advantage) if height[i]<np.median(height)]
 
 
         sns.set_theme(style='white')
