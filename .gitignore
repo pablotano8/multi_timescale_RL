@@ -14,3 +14,4 @@ navigation_simple_grid.py
 plot_bars.py
 /.mypy_cache/
 /.vscode/
+/__pycache__/
