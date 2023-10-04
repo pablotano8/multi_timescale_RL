@@ -6,27 +6,26 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from scipy.signal import savgol_filter
-from sklearn.metrics import r2_score
 
 DEVICE = "cpu"
 
 DEFAULT_ENV_NAME = "LunarLander-v2"
 
-TARGET_LENGTH = 1000 # Maximum lenght of an episode
+TARGET_LENGTH = 1000 #Future transitions used to compute empirical Q-values (1000 is the maximum episode length allowed by the game)
 
-NUM_TRAINING_SAMPLES = 25_000 # States samples to estimate Q_values
+NUM_TRAINING_SAMPLES = 25_000 # States sampled to estimate Q_values
 
-Experience = collections.namedtuple(
-    "Experience", field_names=["state", "action", "reward", "done", "new_state"]
-)
-
+# Array of discounts
 NUM_GAMMAS=25
 GAMMAS = np.linspace(0.6,0.99,NUM_GAMMAS)
 GAMMAS=np.flip(GAMMAS)
 
+# Experience class to store transitions for replay buffer
+Experience = collections.namedtuple(
+    "Experience", field_names=["state", "action", "reward", "done", "new_state"]
+)
 
+# Function to estimate the Kendall's tau error by sampling num_pairs pairs between esitmates and targets
 def kendall_tau_error(estimated_q_values, empirical_q_values, num_pairs=5000):
     """Compute Kendall's tau error."""
     
@@ -46,6 +45,7 @@ def kendall_tau_error(estimated_q_values, empirical_q_values, num_pairs=5000):
     return num_errors / num_pairs
 
 
+# Function to compute the empirical discounted reward for a sequence
 def compute_discounted_reward(reward_sequence, gamma, done_sequence):
     """Compute discounted reward for a sequence."""
     total_reward = 0
@@ -56,6 +56,7 @@ def compute_discounted_reward(reward_sequence, gamma, done_sequence):
     return total_reward
 
 
+# Function to compute Q-value accuracy for sequences of states and rewards
 def compute_q_value_accuracy_for_sequence(net, states, reward_sequences, actions, dones, gamma_idx):
     """Compute Q-value accuracy for sequences of states and rewards."""
     
@@ -81,9 +82,8 @@ def compute_q_value_accuracy_for_sequence(net, states, reward_sequences, actions
 
     return error
 
-
+# Function to compute average Q-value accuracy for multiple states, close and far from landing site
 def compute_accuracy_for_states(net, net_sim):
-    device = "cpu"
 
     env = gym.make(DEFAULT_ENV_NAME)
 
@@ -157,7 +157,7 @@ def compute_accuracy_for_states(net, net_sim):
 
     return accuracies_below_median, accuracies_above_median
 
-# Class to load the trained DQNs
+# Define DQN (Deep Q-Network) class
 class DQN(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(DQN, self).__init__()
@@ -180,7 +180,7 @@ class DQN(nn.Module):
         return self.fc3(self.fc2(self.fc1(x)))
         # return self.fc(x)
 
-
+# Buffer to store and sample experiences
 class ExperienceBuffer:
     def __init__(self, capacity):
         self.buffer = collections.deque(maxlen=capacity)
@@ -224,19 +224,20 @@ class ExperienceBuffer:
                 state = env.reset()
 
 
+# Main function to run the simulation and evaluate Q-value accuracy
 if __name__ == "__main__":
-
 
     all_error_close, all_error_far = [], []
     unnorm_all_error_close, unnorm_all_error_far = [], []
     NUM_NETS=10
     all_nets = []
+    # Iterating over different neural networks. NETWORKS MUST BE TRAINED USING Fig_2_g_train_lunar_multi_gamma.py !!
     for i in range(NUM_NETS):
         print(i)
 
-        # Networks trained using the script lunar_multi_gamma.py
-        net = torch.load( f"nets/lunar_multi_gamma_linear_expert_{i}.pt")
-        net_sim = torch.load( f"nets/lunar_multi_gamma_linear_expert_{i}.pt")
+        # Networks trained using the script Fig_2_g_train_lunar_multi_gamma.py
+        net = torch.load( f"nets/lunar_multi_gamma_{i}.pt")
+        net_sim = torch.load( f"nets/lunar_multi_gamma_{i}.pt")
 
         error_close, error_far = compute_accuracy_for_states(net,net_sim)
 
@@ -252,8 +253,6 @@ if __name__ == "__main__":
 
     mean_close = 1-np.mean(unnorm_all_error_close, axis=0)
     mean_far = 1-np.mean(unnorm_all_error_far, axis=0)
-    # mean_close = 1 - (mean_close - np.mean(mean_close))
-    # mean_far = 1 - (mean_far - np.mean(mean_far))
 
     sem_close = np.std(unnorm_all_error_close, axis=0) / np.sqrt(NUM_NETS)
     sem_far = np.std(unnorm_all_error_far, axis=0) / np.sqrt(NUM_NETS)

@@ -7,8 +7,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
-from Fig_2_f_myopic_mdp import generate_mdp,q_learning
+import pandas as pd
+import seaborn as sns
+import matplotlib.cm as cm
+from scipy.signal import savgol_filter
 
+# PG Network
 class Decoder(nn.Module):
     def __init__(self, input_shape, output_shape) -> None:
         super(Decoder, self).__init__()
@@ -25,7 +29,7 @@ class Decoder(nn.Module):
         out = self.fc(x)
         return out
 
-
+# Compute rewards-to-go for each timestep to be used in the PG learning target.
 def reward_to_go(rews):
     n = len(rews)
     rtgs = np.zeros_like(rews)
@@ -33,18 +37,18 @@ def reward_to_go(rews):
         rtgs[i] = rews[i] + (rtgs[i + 1] if i + 1 < n else 0)
     return rtgs
 
-
+# Class definition for the training process and agent behavior. 
 class Trainable:
     def __init__(
         self, gammas: list, total_time=12, target=None, possible_targets=None, max_reward_magn = 6
     ) -> None:
-        self.total_time = total_time
-        self.gammas = gammas
-        self.target = target
-        self.possible_targets = possible_targets
-        self.max_reward_magn = max_reward_magn
-        self.decoder_net = Decoder(len(gammas), len(possible_targets))
-        self.optimizer = optim.Adam(self.decoder_net.parameters(), lr=1e-3)
+        self.total_time = total_time # Length of the linear MDP
+        self.gammas = gammas # Discounts
+        self.target = target # Method to compute the learning target given the episode's reward time and magnitude
+        self.possible_targets = possible_targets # Possible target for the decoder to choose from (e.g. reward times)
+        self.max_reward_magn = max_reward_magn # Maximum reward magniture
+        self.decoder_net = Decoder(len(gammas), len(possible_targets)) # PG network
+        self.optimizer = optim.Adam(self.decoder_net.parameters(), lr=1e-3)  # Optimizer for PG network
 
     # make function to compute action distribution
     def get_policy(self, obs):
@@ -55,25 +59,25 @@ class Trainable:
     def get_action(self, obs):
         return self.get_policy(obs).sample().item()
 
-    # make loss function whose gradient, for the right data, is policy gradient
+    # make loss function whose gradient is policy gradient
     def compute_loss(self, obs, act, weights):
         logp = self.get_policy(obs).log_prob(act)
         return -(logp * weights).mean()
 
+    # Train the PG network
     def train(
         self,
-        noise_values=0,
-        epochs=500,
-        batch_size=100,
-        random_reward=False,
-        corr_noise_values=False,
-        noise_perceived_time=False,
-        noise_reward=0,
-        min_num_td_steps=59,
-        max_num_td_steps=99
+        noise_values=0, # Corrupt values after learning them (not used in the paper)
+        epochs=500, # Number of episodes to train for.
+        batch_size=100, # Update frequency of the PG network,
+        random_reward=False, # Whether the reward magnitude is random
+        corr_noise_values=False, # Correlation to corrupt values (not used in the paper)
+        noise_perceived_time=False, # Noise in the perceived reward time (not used in the paper)
+        noise_reward=0, # Noise in the perceived reward magnitude (not used in the paper)
+        min_num_td_steps=59 , # Minimum number of backups to do TD learning in each episode
+        max_num_td_steps=99 # Maximum number of backups to do TD learning in each episode
     ):
         total_reward = []
-        epoch_performance = []
 
         for ep in range(epochs):
             # make some empty lists for logging.
@@ -84,16 +88,17 @@ class Trainable:
             while True:
 
                 # MDP and Tabular TD learnig parameters
-                alpha = np.random.normal(loc=0.1, scale=0.001)
-                td_it = np.random.choice(range(min_num_td_steps, max_num_td_steps))
-                rew_time = np.random.choice(range(1, self.total_time - 1))
+                alpha = np.random.normal(loc=0.1, scale=0.001) # Sample random learning rate in each episode
+                td_it = np.random.choice(range(min_num_td_steps, max_num_td_steps))  # Sample random number of backups rate in each episode
+                rew_time = np.random.choice(range(1, self.total_time - 1)) # Sample episode's reward time
 
+                # Sample episode's reward magnitude (should always be >0)
                 if random_reward:
                     rew_magn = 1+np.random.choice(self.max_reward_magn)
                 else:
                     rew_magn = abs(np.random.normal(1, noise_reward))
 
-                # Initialize values
+                # Initialize values of the cue
                 values = np.zeros((self.total_time, len(self.gammas)))
 
                 # Tabular TD learning over the MDP
@@ -135,18 +140,21 @@ class Trainable:
                         noise = np.random.normal(scale=noise_values)
                     values[0, gamma] = values[0, gamma] + noise
 
-                # obervation for PG net is values at first state
+                # The obervation for PG net is values at the cue, it will be used in the PG training batch later
                 obs = [list(np.array([values[0, :]]).flatten())]
                 obs = np.array([item for sublist in obs for item in sublist])
                 obs = obs.flatten()
 
-                # save obs
+                # Save obs in the PG training batch
                 batch_obs.append(obs)
 
-                # act = np.random.choice(range(self.total_time - 1))
+                # The variable 'plan' is used to compute performance (no exploration)
                 plan = self.get_action(
                         torch.as_tensor(obs, dtype=torch.float32).to("cpu")
                     )
+                
+                # The variable 'act' is the actual decision of the network during training, it has epsilon-greedy for exploration
+                # Epsilon-greeduy (eps=0.3)
                 if np.random.rand()<0.3:
                     act = np.random.choice(len(self.possible_targets))
                 else:
@@ -154,6 +162,8 @@ class Trainable:
                         torch.as_tensor(obs, dtype=torch.float32).to("cpu")
                     )
 
+                # The variable 'correct' is the tracked network performance without exploration (not used to train the network)
+                # The variable 'reward' is the reward signal of the true exploratory policy, used to train the network
                 rew, correct = 0, 0
                 if self.possible_targets[act] == self.target(rew_time, rew_magn):
                     rew = 1
@@ -169,14 +179,13 @@ class Trainable:
                 corrects.append(correct)
 
                 if done:
-
-                    # the weight for each logprob(a|s) is R(tau)
+                    # Rewards in the batch
                     batch_weights += list(reward_to_go(ep_rews))
 
                     # reset episode-specific variables
                     done, ep_rews = False, []
 
-                    # end experience loop if we have enough of it
+                    # end experience loop if we fill the batch
                     if len(batch_obs) > batch_size:
                         break
 
@@ -204,6 +213,7 @@ class Trainable:
         return total_reward
 
 
+# Compute possible targets for each of the experiments
 class Target:
     def __init__(self, discount_type: str, discount_param=0.9) -> None:
         self.discount_type = discount_type
@@ -227,11 +237,8 @@ class Target:
         return targets
 
 
-import pandas as pd
-import seaborn as sns
-
 def plot_performance(perf, gamma_experiments, title="", label=""):
-    # Prepare data for seaborn
+
     data = []
     for gamma in gamma_experiments:
         for p in perf[str(gamma)][-100:-1]:
@@ -254,6 +261,7 @@ def plot_performance(perf, gamma_experiments, title="", label=""):
 
 if __name__ == "__main__":
 
+    # For Fig 2d use 'hyperbolic'. For Fig 2c and 2e use 'delta'
     for discount_type in ["delta"]:
 
         print(f"------------- START EXPERIMENT {discount_type} -------------")
@@ -268,32 +276,29 @@ if __name__ == "__main__":
             print(gammas)
             experiment = Trainable(
                 gammas=gammas,
-                total_time=15,
-                max_reward_magn=15,
+                total_time=15, # For Fig 2c use 15, else use 8
+                max_reward_magn=15, # For Fig 2c use 10, for Fig 2d use 4, for Fig 2e use 1
                 target=target.compute_target,
-                possible_targets=target.possible_targets(max_rew_time=15,max_rew_magn=15),
+                possible_targets=target.possible_targets(max_rew_time=15,max_rew_magn=15), #Adjust accordingly for each figure
+                # (15,10) for Fig 2c; (8,4) for Fig 2d; (8,1) for Fig 2e
             )
             performance_experiment[str(gammas)] = experiment.train(
                 noise_values=0,
                 epochs=1000,
-                random_reward=True,
+                random_reward=True, # For Fig 2e use False, else True
                 noise_perceived_time=0,
-                min_num_td_steps=59,
+                min_num_td_steps=59, # For incomplete learning (Fig 2e) use 1, else 59
                 max_num_td_steps=99
             )
             print(f"------------- END EXPERIMENT {gammas} -------------")
 
-        # # Save experiment:
+        # Save experimen resultst:
         with open(f"experiment.pkl", "wb") as f:
             pickle.dump(performance_experiment, f)
 
     # Load experiment:
     with open("experiment.pkl", "rb") as f:
         experiment = pickle.load(f)
-    # with open("delta.pkl", "rb") as f:
-    #     delta = pickle.load(f)
-    # with open("step.pkl", "rb") as f:
-    #     step = pickle.load(f)
 
     mean_perf = [np.mean(experiment[str(gammas)][-50:-1]) for gammas in gamma_experiments]
     gamma_plots = [
@@ -302,22 +307,9 @@ if __name__ == "__main__":
         '[0.6  0.9  0.99]']
 
     fig = plot_performance(experiment, gamma_plots, label="experiment")
-    fig.savefig("random_magnitude.svg", bbox_inches="tight")
+    fig.savefig("Fig_2_plot.svg", bbox_inches="tight")
 
-# plt.figure(figsize=(4, 3))
-# t = np.linspace(0,10,1000)
-# plt.plot(t,1 / (1 + 0.9 * t),label="hyperbolic")
-# plt.plot(t,t==t[500], label="delta")
-# plt.plot(t,0.25*(t>t[250]), label="step")
-# plt.legend()
-# plt.ylabel('Value')
-# plt.xlabel('Time')
-# plt.title('Discounts')
-# plt.savefig("test.png", bbox_inches="tight")
-# plt.show()
-
-from scipy.signal import savgol_filter
-
+###### Plotting Methods for Ext. Fig 1 ######
 def smooth_curve(values, window_size):
     """Computes the moving average and standard error over a window."""
     values_padded = np.pad(values, (window_size // 2, window_size - window_size // 2), mode='edge')
@@ -333,8 +325,6 @@ def compute_error(values, window_size):
     return np.array(errors)
 
 
-
-import matplotlib.cm as cm
 
 unique_gamma_counts = [len(np.unique(exp)) for exp in gamma_experiments]
 

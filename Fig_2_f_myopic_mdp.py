@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
-
+# Create the MDP from Figure 2f. Each call to the function samples values for the random rewards.
+# State s in the figure is called s1 here. State s' in the figure is called s9 here.
 def generate_mdp():
     mdp = {}
 
@@ -40,7 +41,7 @@ def generate_mdp():
 
     return mdp
 
-
+# Simulates a trajectory through the MDP given the initial state and fixed actions for s1 and s9.
 def simulate_trajectory(mdp, initial_state, action_s1, action_s9):
     current_state = initial_state
     trajectory = [current_state]
@@ -63,6 +64,7 @@ def simulate_trajectory(mdp, initial_state, action_s1, action_s9):
 
 import random
 
+# Executes 3 trajectories with fixed action combinations at s1 and s9, such that every branch is explored only once.
 def perform_trajectories(mdp):
     trajectories = [
         ('down', 'down'),
@@ -78,6 +80,7 @@ def perform_trajectories(mdp):
 
     return memory
 
+# Runs the Q-learning algorithm on the given MDP, returning the estimated Q-values.
 def q_learning(mdp, memory, alpha=0.1, gamma=0.99, episodes=10000):
     q_values = {state: {action: 0 for action in actions} for state, actions in mdp.items()}
 
@@ -100,7 +103,7 @@ def q_learning(mdp, memory, alpha=0.1, gamma=0.99, episodes=10000):
 
     return q_values
 
-
+# Decoder network. It will be trained to recognize which branches have the deterministic reward, given the values at the two cue states.
 class Decoder(nn.Module):
     def __init__(self, input_shape, output_shape) -> None:
         super(Decoder, self).__init__()
@@ -117,6 +120,7 @@ class Decoder(nn.Module):
         out = self.fc(x)
         return out
 
+# Computes the accuracy of predictions of the model for the given inputs and labels.
 def compute_accuracy(model, x, y):
     """
     Compute accuracy and SEM for given input, output, and model.
@@ -128,6 +132,7 @@ def compute_accuracy(model, x, y):
         sem = correct.std() / np.sqrt(len(correct))
         return correct.mean(), sem
 
+#Trains the neural network on given training data using mini-batches. 
 def train_decoder(training_data, epochs=100, learning_rate=0.001, val_ratio=0.2, batch_size=32, gammas=[0.9]):
     """
     Train the decoder model on given training data and evaluate on a validation set.
@@ -150,7 +155,7 @@ def train_decoder(training_data, epochs=100, learning_rate=0.001, val_ratio=0.2,
     x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=val_ratio)
 
     # Define the model, loss, and optimizer
-    model = Decoder(input_shape=2 * len(gammas), output_shape=2) # Only 2 q-values per state for each gamma
+    model = Decoder(input_shape=2 * len(gammas), output_shape=2) # Two q-values per state for each gamma (up and down)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -185,6 +190,9 @@ def train_decoder(training_data, epochs=100, learning_rate=0.001, val_ratio=0.2,
     return model
 
 
+
+# The following three methods are used to generate MDPs by randomnizing the branches that have the deterministic reward. The goal of the decoder agent
+# is to recognize the branches with deterministic rewards from the Q-values at the two cues.
 def generate_multi_gamma_qvalues(mdp, gammas,episodes=1000):
     multi_gamma_q_values = []
     
@@ -231,7 +239,8 @@ if __name__ == '__main__':
     # Train and evaluate decoder
     iterations = 2000
 
-    gammas = [0.99, 0.99]
+    # Discounts used in the Decoder
+    gammas = [0.6, 0.99]
     training_data = []
 
     for it in range(iterations):
@@ -255,7 +264,7 @@ if __name__ == '__main__':
 
     ####################
 
-    # Produce Figure that computes performance manually by identifying larger gamma
+    # Produce Figure 2f 
     iterations = 1000
     gammas = [0.6, 0.7, 0.8, 0.9,0.99]
     fractions = []

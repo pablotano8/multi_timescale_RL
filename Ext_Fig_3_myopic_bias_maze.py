@@ -4,18 +4,19 @@ from scipy.signal import savgol_filter
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Function to move in the maze
 def move(size,pos_x,pos_y,act_x,act_y):
     return max((min((pos_x+act_x,size)),0)), max((min((pos_y+act_y,size)),0))
 
 
+# Compute the true value function of a random walk policy in the maze, estimated in the limit of a very large number of episodes (200 000)
 print('Computing True value function...')
-# Generate true value dunction
 size=10
 pos_x , pos_y = 0 , 0
 V=np.zeros((size+1,size+1))
-alpha=0.05
+alpha=0.05 #learning rate
 gamma=0.99
-num_episodes=200000
+num_episodes=200_000
 length_trajectory=100
 for it in range(num_episodes):
     if it%10000==0:
@@ -32,7 +33,6 @@ for it in range(num_episodes):
             r=np.random.normal(2,0.01)           
         else:
             r=np.random.normal(0,0.01)
-#             r=0
             
         if count<length_trajectory:
             act_x , act_y = np.random.choice([-1,0,1],2)
@@ -48,8 +48,10 @@ for it in range(num_episodes):
 
 print('Done')
 
+
+# Generate a buffer of trajectories of random walks in the maze.
+# They will be used to estimate the accuracy of values with different discounts
 print('Generating Trajectories...')
-# Generate Trajectories
 num_episodes=10000
 
 POS, POS_NEXT, R, TER =[] , [] , [] , []
@@ -66,7 +68,6 @@ for _ in range(num_episodes):
             r=np.random.normal(2,0.01)           
         else:
             r=np.random.normal(0,0.01)
-#             r=0
             
         if count<length_trajectory:
             act_x , act_y = np.random.choice([-1,0,1],2)
@@ -92,28 +93,30 @@ for _ in range(num_episodes):
     TER.append(termination)
 print('Done')
 
+
+# Evaluate the accuracy of values computed with different discounts
 print('Evaluating gammas...')
-# EVALUATE
 import scipy.stats as stats
 
 pos_x , pos_y = 0 , 0
-alpha=0.1
-
-# NUM_GAMMAS = 15
-# GAMMAS = np.linspace(0.7,0.99,NUM_GAMMAS)
+alpha=0.1 # Learning rate
 
 NUM_GAMMAS=25
 GAMMAS=np.linspace(0.6,0.99,NUM_GAMMAS)
-NUMBER_OF_TRAJECTORIES = 50
+NUMBER_OF_TRAJECTORIES = 2 # How many trajectories to use in each experiment (change to 50 for the other plot)
 
 
+# Perform 300 repetitions of the experiment
 errors1=[]; errors2=[]; errors=[]
 for it in range(300):
     print(it)
+    # Initialize values
     V=np.zeros((size+1,size+1,NUM_GAMMAS))
+    # Sample random elements from the trajectories generated earlier
     which_trajectories=np.random.choice(range(10000),NUMBER_OF_TRAJECTORIES)
 
     for i in range(0,NUM_GAMMAS):
+        # For the sampled trajectories, do TD-learning until near convergence (10 000 backups)
         for _ in range(10000):
             which_trajectory=np.random.choice(which_trajectories)
             sample=np.random.choice(range(length_trajectory))
@@ -129,24 +132,22 @@ for it in range(300):
                 V[pos_x,pos_y,i] = V[pos_x,pos_y,i] + alpha*(r - V[pos_x,pos_y,i])
 
                 
+    # Compute the kendall tau coefficient in the entire maze and in the two halfs separately
     error, error1, error2 = [], [] , []
     for i in range(0,NUM_GAMMAS):
         tau, _ = stats.kendalltau(V_correct,V[:,:,i])
         error.append(tau)
-#         error.append(np.mean((V_correct-V[:,:,i])**2))
         tau, _ = stats.kendalltau(V_correct[0:5,:],V[0:5,:,i])
         error1.append(tau)
-#         error1.append(np.mean((V_correct[0:5,:]-V[0:5,:,i])**2))
         tau, _ = stats.kendalltau(V_correct[6:,:],V[6:,:,i])
         error2.append(tau)
-#         error2.append(np.mean((V_correct[6:,:]-V[6:,:,i])**2))
-        
+
     errors.append(error)
     errors1.append(error1)
     errors2.append(error2)
 print('Done')
 
-
+####### Plot accuracy figure #######
 sns.set_theme(style='white')
 matlab_blue = (0, 0.2, 0.6)
 matlab_red = (0.7, 0.1, 0)
@@ -171,45 +172,10 @@ plt.show()
 
 fig.savefig('figures/my_figure.svg', format='svg')
 
-# plt.figure(dpi=150)
-# norm = (np.max(np.nanmean(errors2,0))-np.min(np.nanmean(errors2,0)))
-# plt.plot(GAMMAS,(np.nanmean(errors2,0)-np.min(np.nanmean(errors2,0)))/norm,'r')
-# plt.plot(GAMMAS,(np.nanmean(errors2,0)-np.min(np.nanmean(errors2,0)))/norm,'ro')
-# norm = (np.max(np.nanmean(errors1,0))-np.min(np.nanmean(errors1,0)))
-# plt.plot(GAMMAS,(np.nanmean(errors1,0)-np.min(np.nanmean(errors1,0)))/norm,'b')
-# plt.plot(GAMMAS,(np.nanmean(errors1,0)-np.min(np.nanmean(errors1,0)))/norm,'bo')
-# norm = (np.max(np.nanmean(errors,0))-np.min(np.nanmean(errors,0)))
-# plt.plot(GAMMAS,(np.nanmean(errors,0)-np.min(np.nanmean(errors,0)))/norm,'k')
-# plt.plot(GAMMAS,(np.nanmean(errors,0)-np.min(np.nanmean(errors,0)))/norm,'ko')
-# plt.show()
 
-
-# # Results (I already ran them)
-# GAMMAS = np.array([0.7       , 0.72071429, 0.74142857, 0.76214286, 0.78285714,
-#        0.80357143, 0.82428571, 0.845     , 0.86571429, 0.88642857,
-#        0.90714286, 0.92785714, 0.94857143, 0.96928571, 0.99      ])
-
-# y1 = np.array([-0.05433766,  0.25635305,  0.56704375,  0.92518429,  1.23337362,
-#         1.57363478,  1.87825319,  2.23851651,  2.54411493,  2.88545775,
-#         3.08196232,  3.24264565,  3.28695128,  3.24635677,  3.20576227])
-
-# y2 = np.array([0.74466098, 0.76295951, 0.78125803, 0.79851108, 0.7613913 ,
-#        0.79291785, 0.75735657, 0.78217872, 0.74968564, 0.68094392,
-#        0.60882914, 0.56520384, 0.36520384, 0.23690201, 0.10860017])
-
-# plt.figure(dpi=150)
-# plt.plot(GAMMAS,y1,color='C1')
-# plt.plot(GAMMAS,y1,'.',color='C1')
-# plt.plot(GAMMAS,y2,'C0')
-# plt.plot(GAMMAS,y2,'.',color='C0')
-# plt.show()
-
-
-# Values for interesting trajectory
+####### Plot values for interesting trajectory #######
 interesting_traj=[[8, 1],[8, 2],[8, 3],[8, 4],[8, 5],[9, 5],[9, 4],[9, 3],[9, 2],[9, 1]]
 interesting_traj_next=[[8, 2],[8, 3],[8, 4],[8, 5],[9, 5],[9, 4],[9, 3],[9, 2],[9, 1],[9,1]]
-# interesting_traj=[[1, 5],[2, 5],[3, 5],[4, 5],[6, 5],[7, 5],[8, 5],[9, 5],[9, 6],[9, 7]]
-# interesting_traj_next=[[2, 5],[3, 5],[4, 5],[6, 5],[7, 5],[8, 5],[9, 5],[9, 6],[9, 7],[9, 7]]
 rewards_interesting_traj = [-0.01,0.02,-0.02,0.05,0.05,-4,0.02,-0.001,0.0001,2]
 
 

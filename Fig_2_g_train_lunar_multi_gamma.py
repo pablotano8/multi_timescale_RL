@@ -10,36 +10,33 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+# Constants for the environment and training
 DEFAULT_ENV_NAME = "LunarLander-v2"
-NUM_EXPERIMENTS = 5
-NUM_FRAMES_PER_EXPERIMENT = 125_000
+NUM_EXPERIMENTS = 3 # How many networks to train and save
+NUM_FRAMES_PER_EXPERIMENT = 50_000 # Training length
 
 BATCH_SIZE = 32
-REPLAY_SIZE = 200000 #200000
-LEARNING_RATE = 1e-3 #1e-4
-SYNC_TARGET_FRAMES = 1000
-REPLAY_START_SIZE = 10000 #200000
+REPLAY_SIZE = 20000 # Size of the Biffer
+LEARNING_RATE = 1e-3 
+SYNC_TARGET_FRAMES = 1000 # Frequency to sync target network
+REPLAY_START_SIZE = 10000 # Random behavior before starting to act
 
 EPSILON_DECAY_LAST_FRAME = 40_000
 EPSILON_START = 1.0
 EPSILON_FINAL = 0.01
 
-
+# Discounts
 NUM_GAMMAS=25
-# taus=np.linspace(0,100,NUM_GAMMAS)
-# GAMMAS=np.exp(-1/taus)
-# GAMMAS[-1]=0.99
-
-# GAMMAS =0.99 + 0* GAMMAS
 GAMMAS = np.linspace(0.6,0.99,NUM_GAMMAS)
 GAMMAS=np.flip(GAMMAS)
 
+# Experience class to store transitions for replay buffer
 Experience = collections.namedtuple(
     'Experience', field_names=['state', 'action', 'reward',
                                'done', 'new_state'])
 
 
-
+# Neural Network model for Q-learning (Deep Q-Network)
 class DQN(nn.Module):
     def __init__(self,state_dim,action_dim):
         super(DQN, self).__init__()
@@ -63,7 +60,8 @@ class DQN(nn.Module):
         return self.fc3(self.fc2(self.fc1(x)))
         # return self.fc(x)
     
-    
+
+# Experience replay buffer to store transitions 
 class ExperienceBuffer:
     def __init__(self, capacity):
         self.buffer = collections.deque(maxlen=capacity)
@@ -85,6 +83,7 @@ class ExperienceBuffer:
                np.array(next_states)
 
 
+# Agent class which interacts with the environment and the model
 class Agent:
     def __init__(self, env, exp_buffer):
         self.env = env
@@ -123,14 +122,13 @@ class Agent:
         return done_reward
 
 
-
-
-
+# Calculate loss for a batch of transitions
 def calc_loss(batch, net, tgt_net, device="cpu"):
     
+    # Unpack the batch
     states, actions, rewards, dones, next_states = batch
 
-
+    # Convert numpy arrays to PyTorch tensors and move them to the appropriate device
     states_v = torch.tensor(np.array(
         states, copy=False)).to(device)
     next_states_v = torch.tensor(np.array(
@@ -140,24 +138,23 @@ def calc_loss(batch, net, tgt_net, device="cpu"):
     output=net(states_v)
     output=output.reshape(len(rewards),NUM_GAMMAS,env.action_space.n)
     state_action_values=output[range(0,len(rewards)),:,actions_v0]
-
-    
     rewards_v = torch.tensor(rewards).to(device)
     done_mask = torch.BoolTensor(dones).to(device)
-
     rewards_v=rewards_v.repeat(NUM_GAMMAS,1).T
     done_mask=done_mask.repeat(NUM_GAMMAS,1).T
 
+    # Array of Gammas to compute Q-values in parallel
     gammas=np.tile(GAMMAS,(len(rewards),1))
     gammas=np.float32(gammas)
     gammas=torch.tensor(gammas).to(device)
-
     rewards_v[done_mask] = -1
 
+    # Calculate expected Q-values
     with torch.no_grad():
         output_next=tgt_net(next_states_v)
         output_next=output_next.reshape(len(rewards),NUM_GAMMAS,env.action_space.n)
 
+        # All Q-values are computed using the behavioral action for the next state
         best_action=torch.argmax(output_next[:,0,:],dim=-1)
 
         next_state_values=output_next[range(0,len(rewards)),:,best_action]
@@ -165,13 +162,14 @@ def calc_loss(batch, net, tgt_net, device="cpu"):
 
         next_state_values = next_state_values.detach()
 
-
+    # Each target Q-value uses its corresponding gamma
     expected_state_action_values=next_state_values * gammas + \
                                    rewards_v
 
     return nn.SmoothL1Loss()(state_action_values,expected_state_action_values)
 
 
+# Main loop for training
 if __name__ == "__main__":
 
     reward_experiment = []
@@ -252,39 +250,7 @@ if __name__ == "__main__":
             del batch
     
         reward_experiment.append(total_rewards)
-        torch.save(net, f'nets/lunar_multi_gamma_linear_expert_{i}.pt')
 
+        # Save Network
+        torch.save(net, f'nets/lunar_multi_gamma_{i}.pt')
 
-# import pickle
-
-# with open('rewards_10g_lunar_lander.pkl', 'wb') as f:
-#     pickle.dump(reward_experiment, f)
-
-# with open('rewards_10g_lunar_lander.pkl', 'rb') as f:
-#     rewards = pickle.load(f)
-
-# min([len(rewards[i]) for i in range(len(rewards))])
-# mean_reward = []
-# for i in range(395):
-#     mean_reward.append(np.mean([rewards[n][i] for n in range(len(rewards))]))
-
-# import matplotlib.pyplot as plt
-
-# plt.plot(mean_reward)
-# plt.grid(b=True)
-# plt.show()
-
-
-# import pickle
-
-# with open('rewards_breakout_10g.pkl', 'wb') as f:
-#     pickle.dump(total_rewards, f)
-
-# with open('rewards_breakout_10g.pkl', 'rb') as f:
-#     rewards = pickle.load(f)
-
-# import matplotlib.pyplot as plt
-
-# plt.plot(rewards)
-# plt.grid(b=True)
-# plt.show()
