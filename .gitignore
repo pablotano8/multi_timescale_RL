@@ -1,0 +1,16 @@
+/nets/
+/variables/
+/figures/
+atary_train.py
+atari_decoder.py
+basic_gamma_figs.py
+beh_gamma.py
+breakout_learning_advantage.py
+deep_RL.ipynb
+lunar_decoder.py
+lunar_lander_learning_advantage.py
+navigation_multigamma.py
+navigation_simple_grid.py
+plot_bars.py
+/.mypy_cache/
+/.vscode/

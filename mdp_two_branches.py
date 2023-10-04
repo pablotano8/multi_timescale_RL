@@ -36,14 +36,10 @@ def reward_to_go(rews):
 
 class Trainable:
     def __init__(
-        self, gammas: list, total_time=12, target=None, possible_targets=None, max_reward_magn = 6
+        self, gammas: list
     ) -> None:
-        self.total_time = total_time
         self.gammas = gammas
-        self.target = target
-        self.possible_targets = possible_targets
-        self.max_reward_magn = max_reward_magn
-        self.decoder_net = Decoder(len(gammas), len(possible_targets))
+        self.decoder_net = Decoder(2*len(gammas), 2)
         self.optimizer = optim.Adam(self.decoder_net.parameters(), lr=1e-3)
 
     # make function to compute action distribution
@@ -62,18 +58,12 @@ class Trainable:
 
     def train(
         self,
-        noise_values=0,
         epochs=500,
         batch_size=100,
-        random_reward=False,
-        corr_noise_values=False,
-        noise_perceived_time=False,
-        noise_reward=0,
         min_num_td_steps=59,
         max_num_td_steps=99
     ):
         total_reward = []
-        epoch_performance = []
 
         for ep in range(epochs):
             # make some empty lists for logging.
@@ -85,58 +75,56 @@ class Trainable:
 
                 # MDP and Tabular TD learnig parameters
                 alpha = np.random.normal(loc=0.1, scale=0.001)
-                td_it = np.random.choice(range(min_num_td_steps, max_num_td_steps))
-                rew_time = np.random.choice(range(1, self.total_time - 1))
+                td_it_up = np.random.choice(range(min_num_td_steps, max_num_td_steps))
+                td_it_down = np.random.choice(range(min_num_td_steps, max_num_td_steps))
 
-                if random_reward:
-                    rew_magn = 1+np.random.choice(self.max_reward_magn)
-                else:
-                    rew_magn = abs(np.random.normal(1, noise_reward))
-
+                while True:
+                    branch_length_up = rand.randint(5, 15)
+                    branch_length_down = rand.randint(5, 15)
+                    if branch_length_up != branch_length_down:
+                        break
+                    
                 # Initialize values
-                values = np.zeros((self.total_time, len(self.gammas)))
+                values_up = np.zeros((15, len(self.gammas)))
+                values_down = np.zeros((15, len(self.gammas)))
 
                 # Tabular TD learning over the MDP
-                for _ in range(td_it):
+                for _ in range(td_it_up):
 
-                    if noise_perceived_time:
-                        perceived_rew_time = int(
-                            abs(
-                                rew_time
-                                + np.random.normal(0, rew_time * noise_perceived_time)
-                            )
-                        )
-                    else:
-                        perceived_rew_time = rew_time
-
-                    for i in reversed(range(self.total_time - 1)):
+                    for i in reversed(range(branch_length_up - 1)):
                         for j in reversed(range(len(self.gammas))):
-                            if i == (perceived_rew_time):
-                                rew = rew_magn
-                            else:
-                                rew = 0
 
-                            if i == (self.total_time - 2):
-                                values[i, j] = values[i, j] + alpha * (
-                                    rew - values[i, j]
+                            if i == (branch_length_up - 2):
+                                values_up[i, j] = values_up[i, j] + alpha * (
+                                    1 - values_up[i, j]
                                 )
                             else:
-                                values[i, j] = values[i, j] + alpha * (
-                                    rew
-                                    + self.gammas[j] * values[i + 1, j]
-                                    - values[i, j]
+                                values_up[i, j] = values_up[i, j] + alpha * (
+                                    0
+                                    + self.gammas[j] * values_up[i + 1, j]
+                                    - values_up[i, j]
                                 )
 
-                # Corrupt values
-                noise = np.random.normal(scale=noise_values * values[0, 0])
+                # Tabular TD learning over the MDP
+                for _ in range(td_it_down):
 
-                for gamma in range(len(self.gammas)):
-                    if corr_noise_values is False:
-                        noise = np.random.normal(scale=noise_values)
-                    values[0, gamma] = values[0, gamma] + noise
+                    for i in reversed(range(branch_length_down - 1)):
+                        for j in reversed(range(len(self.gammas))):
+
+                            if i == (branch_length_down - 2):
+                                values_down[i, j] = values_down[i, j] + alpha * (
+                                    1 - values_down[i, j]
+                                )
+                            else:
+                                values_down[i, j] = values_down[i, j] + alpha * (
+                                    0
+                                    + self.gammas[j] * values_down[i + 1, j]
+                                    - values_down[i, j]
+                                )
+
 
                 # obervation for PG net is values at first state
-                obs = [list(np.array([values[0, :]]).flatten())]
+                obs = [list(np.array(np.concatenate([values_up[0, :],values_down[0, :]])).flatten())]
                 obs = np.array([item for sublist in obs for item in sublist])
                 obs = obs.flatten()
 
@@ -148,18 +136,22 @@ class Trainable:
                         torch.as_tensor(obs, dtype=torch.float32).to("cpu")
                     )
                 if np.random.rand()<0.3:
-                    act = np.random.choice(len(self.possible_targets))
+                    act = np.random.choice(2)
                 else:
                     act = self.get_action(
                         torch.as_tensor(obs, dtype=torch.float32).to("cpu")
                     )
 
                 rew, correct = 0, 0
-                if self.possible_targets[act] == self.target(rew_time, rew_magn):
-                    rew = 1
+                if act==0 and branch_length_down<branch_length_up:
+                    rew=1
+                elif act==1 and branch_length_down>branch_length_up:
+                    rew=1
 
-                if self.possible_targets[plan] == self.target(rew_time, rew_magn):
-                    correct = 1
+                if plan==0 and branch_length_down<branch_length_up:
+                    correct=1
+                elif plan==1 and branch_length_down>branch_length_up:
+                    correct=1
 
                 done = True
 
@@ -204,29 +196,6 @@ class Trainable:
         return total_reward
 
 
-class Target:
-    def __init__(self, discount_type: str, discount_param=0.9) -> None:
-        self.discount_type = discount_type
-        self.discount_param = discount_param
-
-    def compute_target(self, rew_time, rew_magn):
-        if self.discount_type == "hyperbolic":
-            return rew_magn * (1 / (1 + self.discount_param * rew_time))
-        elif self.discount_type == "delta":
-            return rew_time
-
-    def possible_targets(self, max_rew_time, max_rew_magn=6):
-        targets = []
-        if self.discount_type == "delta":
-            for t in range(max_rew_time):
-                targets.append(self.compute_target(t, 1))
-        else:
-            for t in range(max_rew_time):
-                for r in range(max_rew_magn):
-                    targets.append(self.compute_target(t, 1+r))
-        return targets
-
-
 import pandas as pd
 import seaborn as sns
 
@@ -260,7 +229,6 @@ if __name__ == "__main__":
         gamma_experiments = np.array(
             [[0.6, 0.9, 0.99], [0.6,0.6,0.9], [0.6,0.6,0.99], [0.9,0.9,0.99], [0.6, 0.6, 0.6], [0.9, 0.9, 0.9], [0.99, 0.99, 0.99] ]
         )
-        target = Target(discount_type=discount_type)
 
         performance_experiment = {}
         learning_curves = {} 
@@ -268,17 +236,10 @@ if __name__ == "__main__":
             print(gammas)
             experiment = Trainable(
                 gammas=gammas,
-                total_time=15,
-                max_reward_magn=15,
-                target=target.compute_target,
-                possible_targets=target.possible_targets(max_rew_time=15,max_rew_magn=15),
             )
             performance_experiment[str(gammas)] = experiment.train(
-                noise_values=0,
-                epochs=1000,
-                random_reward=True,
-                noise_perceived_time=0,
-                min_num_td_steps=59,
+                epochs=2000,
+                min_num_td_steps=1,
                 max_num_td_steps=99
             )
             print(f"------------- END EXPERIMENT {gammas} -------------")
@@ -304,17 +265,6 @@ if __name__ == "__main__":
     fig = plot_performance(experiment, gamma_plots, label="experiment")
     fig.savefig("random_magnitude.svg", bbox_inches="tight")
 
-# plt.figure(figsize=(4, 3))
-# t = np.linspace(0,10,1000)
-# plt.plot(t,1 / (1 + 0.9 * t),label="hyperbolic")
-# plt.plot(t,t==t[500], label="delta")
-# plt.plot(t,0.25*(t>t[250]), label="step")
-# plt.legend()
-# plt.ylabel('Value')
-# plt.xlabel('Time')
-# plt.title('Discounts')
-# plt.savefig("test.png", bbox_inches="tight")
-# plt.show()
 
 from scipy.signal import savgol_filter
 
@@ -347,14 +297,14 @@ for unique_gamma_count in unique_gamma_counts:
     elif unique_gamma_count == 3:
         colors.append(cm.gray)
 
-window_size = 200
+window_size = 300
 plt.figure(figsize=(5, 4))
 
 # Assume performance_experiment is already defined
 for i, ((gamma, curve), color_map) in enumerate(zip(performance_experiment.items(), colors)):
     # Map the range [0, 1] to [0.4, 1] to avoid too light colors
     color = color_map(0.4 + 0.6 * (i / len(gamma_experiments)))
-    smoothed_curve = savgol_filter(curve, 200, 1)
+    smoothed_curve = savgol_filter(curve, 300, 1)
     error = compute_error(smoothed_curve, window_size)
     
     min_length = min(len(smoothed_curve), len(error))

@@ -13,7 +13,7 @@ from scipy.signal import savgol_filter
 import seaborn as sns
 
 
-NUM_TRAINED_NETS = 20
+NUM_TRAINED_NETS = 1
 DEFAULT_ENV_NAME = "LunarLander-v2"
 NUM_FRAMES_PER_EXPERIMENT = 50_000
 
@@ -32,8 +32,9 @@ NUM_GAMMAS=25
 taus=np.linspace(0,100,NUM_GAMMAS)
 GAMMAS=np.exp(-1/taus)
 GAMMAS[-1]=0.99 # The behavioral gamma will be gamma=0.99
-GAMMAS=np.flip(GAMMAS) # The index of the behavioral gamma is 0
 
+GAMMAS=np.flip(GAMMAS) # The index of the behavioral gamma is 0
+taus = np.flip(taus)
 
 Experience = collections.namedtuple(
     'Experience', field_names=['state', 'action', 'reward',
@@ -111,11 +112,8 @@ class Agent:
         if np.random.random() < epsilon:
             action = env.action_space.sample()
         else:
-            # print(self.state)
             state_a = np.array([self.state], copy=False)
-            # print(state_a)
             state_v = torch.tensor(state_a).to(device)
-            # print(state_v)
             q_vals_v = net(state_v)
             _, act_v = torch.max(q_vals_v.narrow(-1,0,env.action_space.n), dim=1)
             action = int(act_v.item())
@@ -328,7 +326,8 @@ if __name__ == "__main__":
                 ratio.append(np.array((np.sum(delta[gamma])/BATCH_SIZE)))
 
             # Normalize 'ratio' to get the learning advantage
-            ratio=ratio-np.mean(ratio)
+            # ratio=ratio-np.mean(ratio)
+            ratio=ratio
             learning_advantage.append(ratio)
 
             # Get the height of the rocket in each state, to separately compute LA
@@ -340,28 +339,48 @@ if __name__ == "__main__":
         dif_low = [w for i,w in enumerate(learning_advantage) if height[i]<np.median(height)]
 
 
-        sns.set_theme(style='white')
-        plt.figure(figsize=(2.3, 2.3))
-        plt.plot([0,100],[0,0],color=[0.6,0.6,0.6])
-        mean_low = savgol_filter(np.flip(np.mean(dif_low,0)),5,1)
-        # mean_low = (mean_low-np.min(mean_low))/(np.max(mean_low-np.min(mean_low)))
-        std_low = np.flip(np.std(dif_low,0))
+        # sns.set_theme(style='white')
+        # plt.figure(figsize=(2.3, 2.3))
+        # plt.plot([0,100],[0,0],color=[0.6,0.6,0.6])
+        # mean_low = savgol_filter(np.flip(np.mean(dif_low,0)),5,1)
+        # std_low = np.flip(np.std(dif_low,0))
 
-        mean_high = savgol_filter(np.flip(np.mean(dif_high,0)),5,1)
-        # mean_high = (mean_high-np.min(mean_high))/(np.max(mean_high-np.min(mean_high)))
-        std_high = np.flip(np.std(dif_high,0))
+        # mean_high = savgol_filter(np.flip(np.mean(dif_high,0)),5,1)
+        # std_high = np.flip(np.std(dif_high,0))
 
 
 
-        plt.plot(taus, mean_low, '-', label='mean_1')
-        plt.fill_between(taus, mean_low - std_low/2, mean_low + std_low/2, color='C0', alpha=0.2)
-        plt.plot(taus, mean_high, '-', label='mean_2')
-        plt.fill_between(taus, mean_high - std_high/2, mean_high + std_high/2, color='C1', alpha=0.2)
-        plt.plot(taus,mean_low,'.',color='C0')
-        plt.plot(taus,mean_high,'.',color='C1')
-        plt.yticks([0])
-        # plt.savefig("lunarlander_adv.svg", format='svg')
-        plt.show()
+        # plt.plot(taus, mean_low, '-', label='mean_1')
+        # plt.fill_between(taus, mean_low - std_low/2, mean_low + std_low/2, color='C0', alpha=0.2)
+        # plt.plot(taus, mean_high, '-', label='mean_2')
+        # plt.fill_between(taus, mean_high - std_high/2, mean_high + std_high/2, color='C1', alpha=0.2)
+        # plt.plot(taus,mean_low,'.',color='C0')
+        # plt.plot(taus,mean_high,'.',color='C1')
+        # plt.yticks([0])
+        # # plt.savefig("lunarlander_adv.svg", format='svg')
+        # plt.show()
 
         all_dif_high.append(dif_high)
         all_dif_low.append(dif_low)
+
+
+    sns.set_theme(style='white')
+    plt.figure(figsize=(2.3, 2.3))
+    # plt.plot([0,100],[0,0],color=[0.6,0.6,0.6])
+    mean_low = savgol_filter(np.flip(np.mean(all_dif_low, axis=(0, 1))),3,1)
+    std_low = np.flip(np.std(all_dif_low, axis=(0, 1)) / np.sqrt(20))
+
+    mean_high = savgol_filter(np.flip(np.mean(all_dif_high, axis=(0, 1))),3,1)
+    std_high = np.flip(np.std(all_dif_high, axis=(0, 1)) / np.sqrt(20))
+
+
+
+    plt.plot(GAMMAS, mean_low, '-', label='mean_1')
+    plt.fill_between(GAMMAS, mean_low - std_low, mean_low + std_low, color='C0', alpha=0.2)
+    plt.plot(GAMMAS, mean_high, '-', label='mean_2')
+    plt.fill_between(GAMMAS, mean_high - std_high, mean_high + std_high, color='C1', alpha=0.2)
+    plt.plot(GAMMAS,mean_low,'.',color='C0')
+    plt.plot(GAMMAS,mean_high,'.',color='C1')
+    # plt.yticks([0])
+    # plt.savefig("lunarlander_adv.svg", format='svg')
+    plt.show()

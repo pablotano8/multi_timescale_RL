@@ -11,26 +11,27 @@ import torch.nn as nn
 import torch.optim as optim
 
 DEFAULT_ENV_NAME = "LunarLander-v2"
-NUM_EXPERIMENTS = 3
-NUM_FRAMES_PER_EXPERIMENT = 75_000
+NUM_EXPERIMENTS = 5
+NUM_FRAMES_PER_EXPERIMENT = 125_000
 
 BATCH_SIZE = 32
-REPLAY_SIZE = 150000 #200000
+REPLAY_SIZE = 200000 #200000
 LEARNING_RATE = 1e-3 #1e-4
 SYNC_TARGET_FRAMES = 1000
 REPLAY_START_SIZE = 10000 #200000
 
-EPSILON_DECAY_LAST_FRAME = 50000
+EPSILON_DECAY_LAST_FRAME = 40_000
 EPSILON_START = 1.0
 EPSILON_FINAL = 0.01
 
 
 NUM_GAMMAS=25
-taus=np.linspace(1,100,NUM_GAMMAS)
-GAMMAS=np.exp(-1/taus)
-GAMMAS[-1]=0.99
+# taus=np.linspace(0,100,NUM_GAMMAS)
+# GAMMAS=np.exp(-1/taus)
+# GAMMAS[-1]=0.99
 
-
+# GAMMAS =0.99 + 0* GAMMAS
+GAMMAS = np.linspace(0.6,0.99,NUM_GAMMAS)
 GAMMAS=np.flip(GAMMAS)
 
 Experience = collections.namedtuple(
@@ -91,37 +92,37 @@ class Agent:
         self._reset()
 
     def _reset(self):
-        self.state = env.reset()[0]
+        self.state = env.reset()
         self.total_reward = 0.0
 
     @torch.no_grad()
-    def play_step(self, net, epsilon=0.0, device="cpu"):
+    def play_step(self, net, epsilon=0.0, device="cpu",learning=True):
         done_reward = None
 
         if np.random.random() < epsilon:
             action = env.action_space.sample()
         else:
-            # print(self.state)
             state_a = np.array([self.state], copy=False)
-            # print(state_a)
             state_v = torch.tensor(state_a).to(device)
-            # print(state_v)
             q_vals_v = net(state_v)
             _, act_v = torch.max(q_vals_v.narrow(-1,0,env.action_space.n), dim=1)
             action = int(act_v.item())
 
         # do step in the environment
-        new_state, reward, is_done, _, _= self.env.step(action)
+        new_state, reward, is_done, _= self.env.step(action)
         self.total_reward += reward
 
         exp = Experience(self.state, action, reward,
                          is_done, new_state)
-        self.exp_buffer.append(exp)
+        if learning:
+            self.exp_buffer.append(exp)
         self.state = new_state
         if is_done:
             done_reward = self.total_reward
             self._reset()
         return done_reward
+
+
 
 
 
@@ -228,7 +229,6 @@ if __name__ == "__main__":
                         frame_idx, len(total_rewards), m_reward, epsilon,
                         speed, reward
                     ))
-
             
             
             if len(buffer) < REPLAY_START_SIZE:
@@ -252,7 +252,7 @@ if __name__ == "__main__":
             del batch
     
         reward_experiment.append(total_rewards)
-        torch.save(net, f'lunar_multi_gamma_{i}.pt')
+        torch.save(net, f'nets/lunar_multi_gamma_linear_expert_{i}.pt')
 
 
 # import pickle

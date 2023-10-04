@@ -103,17 +103,15 @@ alpha=0.1
 # GAMMAS = np.linspace(0.7,0.99,NUM_GAMMAS)
 
 NUM_GAMMAS=25
-taus=np.linspace(1,100,NUM_GAMMAS)
-GAMMAS=np.exp(-1/taus)
-GAMMAS[-1]=0.99
-
+GAMMAS=np.linspace(0.6,0.99,NUM_GAMMAS)
+NUMBER_OF_TRAJECTORIES = 50
 
 
 errors1=[]; errors2=[]; errors=[]
 for it in range(300):
     print(it)
     V=np.zeros((size+1,size+1,NUM_GAMMAS))
-    which_trajectories=np.random.choice(range(10000),2)
+    which_trajectories=np.random.choice(range(10000),NUMBER_OF_TRAJECTORIES)
 
     for i in range(0,NUM_GAMMAS):
         for _ in range(10000):
@@ -150,7 +148,8 @@ print('Done')
 
 
 sns.set_theme(style='white')
-
+matlab_blue = (0, 0.2, 0.6)
+matlab_red = (0.7, 0.1, 0)
 norm_errors = (errors2-np.min(np.nanmean(errors2,0)))/(np.max(np.nanmean(errors2,0))-np.min(np.nanmean(errors2,0)))
 mean2 = savgol_filter(np.nanmean(norm_errors,0),7,1)
 # mean_low = (mean_low-np.min(mean_low))/(np.max(mean_low-np.min(mean_low)))
@@ -161,14 +160,16 @@ mean1 = savgol_filter(np.nanmean(norm_errors,0),7,1)
 # mean_low = (mean_low-np.min(mean_low))/(np.max(mean_low-np.min(mean_low)))
 std1 = np.std(mean1,0)
 
-plt.plot(taus, mean1, '-', label='mean_1',color='C1')
-plt.fill_between(taus, mean1 - std1/2, mean1 + std1/2, color='r', alpha=0.2)
-plt.plot(taus, mean2, '-', label='mean_2',color='C0')
-plt.fill_between(taus, mean2 - std2/2, mean2 + std2/2, color='b', alpha=0.2)
-plt.plot(taus,mean2,'.',color='C0')
-plt.plot(taus,mean1,'.',color='C1')
+fig, ax = plt.subplots(figsize=(4, 3))
+plt.plot(GAMMAS, mean1, '-', label='mean_1',color=matlab_red)
+plt.fill_between(GAMMAS, mean1 - std1/2, mean1 + std1/2, color=matlab_red, alpha=0.2)
+plt.plot(GAMMAS, mean2, '-', label='mean_2',color=matlab_blue)
+plt.fill_between(GAMMAS, mean2 - std2/2, mean2 + std2/2, color=matlab_blue, alpha=0.2)
+plt.plot(GAMMAS,mean2,'.',color=matlab_blue)
+plt.plot(GAMMAS,mean1,'.',color=matlab_red)
 plt.show()
 
+fig.savefig('figures/my_figure.svg', format='svg')
 
 # plt.figure(dpi=150)
 # norm = (np.max(np.nanmean(errors2,0))-np.min(np.nanmean(errors2,0)))
@@ -236,16 +237,15 @@ for position in interesting_traj:
     low_gamma_estimate.append(V[position[0],position[1],0])
     high_gamma_estimate.append(V[position[0],position[1],-1])
 
-plt.figure(figsize=[3,2])
-# plt.plot([1,2,3,4,5,6,7,8,9,10],true_value,color=[0.4,0.4,0.4])
-# plt.plot([1,2,3,4,5,6,7,8,9,10],true_value,'.',color=[0.4,0.4,0.4])
-# plt.plot([1,2,3,4,5,6,7,8,9,10],high_gamma_estimate,color=[0.6,0.4,0.2])
-# plt.plot([1,2,3,4,5,6,7,8,9,10],high_gamma_estimate,'.',color=[0.6,0.4,0.2])
+fig = plt.figure(figsize=[4,3])
+plt.plot([1,2,3,4,5,6,7,8,9,10],true_value,color=[0.4,0.4,0.4])
+plt.plot([1,2,3,4,5,6,7,8,9,10],true_value,'.',color=[0.4,0.4,0.4])
+plt.plot([1,2,3,4,5,6,7,8,9,10],high_gamma_estimate,color=[0.6,0.4,0.2])
+plt.plot([1,2,3,4,5,6,7,8,9,10],high_gamma_estimate,'.',color=[0.6,0.4,0.2])
 plt.plot([1,2,3,4,5,6,7,8,9,10],low_gamma_estimate,color=[0.4,0.8,0.4])
 plt.plot([1,2,3,4,5,6,7,8,9,10],low_gamma_estimate,'.',color=[0.4,0.8,0.4])
 plt.ylim([-8,5])
-plt.savefig('figure.png', transparent=True)
 plt.show()
 
-
+fig.savefig('figures/my_figure.svg', format='svg')
 
