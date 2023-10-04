@@ -5,6 +5,7 @@ import matplotlib
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Method to perform td learning in the two experiments
 def td_learning(num_states, num_backups, alpha=0.02, gamma = 0.9, reward_magnitude=1):
     values = np.zeros(num_states)
     learned_values = []
