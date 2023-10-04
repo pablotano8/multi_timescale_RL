@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
-from myopic_mdp import generate_mdp,q_learning
+from Fig_2_f_myopic_mdp import generate_mdp,q_learning
 
 class Decoder(nn.Module):
     def __init__(self, input_shape, output_shape) -> None:

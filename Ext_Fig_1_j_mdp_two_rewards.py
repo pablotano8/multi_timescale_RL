@@ -7,7 +7,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
-from myopic_mdp import generate_mdp,q_learning
+from Fig_2_f_myopic_mdp import generate_mdp,q_learning
+from itertools import combinations_with_replacement
+import pandas as pd
+import seaborn as sns
+from itertools import product
+
 
 class Decoder(nn.Module):
     def __init__(self, input_shape, output_shape) -> None:
@@ -65,10 +70,8 @@ class Trainable:
         noise_values=0,
         epochs=500,
         batch_size=100,
-        random_reward=False,
         corr_noise_values=False,
         noise_perceived_time=False,
-        noise_reward=0,
         min_num_td_steps=59,
         max_num_td_steps=99
     ):
@@ -86,12 +89,11 @@ class Trainable:
                 # MDP and Tabular TD learnig parameters
                 alpha = np.random.normal(loc=0.1, scale=0.001)
                 td_it = np.random.choice(range(min_num_td_steps, max_num_td_steps))
-                rew_time = np.random.choice(range(1, self.total_time - 1))
+                rew_time1 = np.random.choice(range(1, self.total_time -1 ))
+                rew_time2 = np.random.choice(range(1, self.total_time -1 ))
 
-                if random_reward:
-                    rew_magn = 1+np.random.choice(self.max_reward_magn)
-                else:
-                    rew_magn = abs(np.random.normal(1, noise_reward))
+                rew_magn1 = 1 + np.random.choice(self.max_reward_magn)
+                rew_magn2 = 1 + np.random.choice(self.max_reward_magn)
 
                 # Initialize values
                 values = np.zeros((self.total_time, len(self.gammas)))
@@ -99,20 +101,12 @@ class Trainable:
                 # Tabular TD learning over the MDP
                 for _ in range(td_it):
 
-                    if noise_perceived_time:
-                        perceived_rew_time = int(
-                            abs(
-                                rew_time
-                                + np.random.normal(0, rew_time * noise_perceived_time)
-                            )
-                        )
-                    else:
-                        perceived_rew_time = rew_time
-
-                    for i in reversed(range(self.total_time - 1)):
+                    for i in reversed(range(self.total_time -1)):
                         for j in reversed(range(len(self.gammas))):
-                            if i == (perceived_rew_time):
-                                rew = rew_magn
+                            if i == rew_time1:
+                                rew = rew_magn1
+                            elif i== rew_time2:
+                                rew = rew_magn2
                             else:
                                 rew = 0
 
@@ -143,7 +137,6 @@ class Trainable:
                 # save obs
                 batch_obs.append(obs)
 
-                # act = np.random.choice(range(self.total_time - 1))
                 plan = self.get_action(
                         torch.as_tensor(obs, dtype=torch.float32).to("cpu")
                     )
@@ -153,12 +146,12 @@ class Trainable:
                     act = self.get_action(
                         torch.as_tensor(obs, dtype=torch.float32).to("cpu")
                     )
-
+                
                 rew, correct = 0, 0
-                if self.possible_targets[act] == self.target(rew_time, rew_magn):
+                if self.possible_targets[act] == rew_time1 * rew_time2:
                     rew = 1
 
-                if self.possible_targets[plan] == self.target(rew_time, rew_magn):
+                if self.possible_targets[plan] == rew_time1 * rew_time2:
                     correct = 1
 
                 done = True
@@ -209,26 +202,14 @@ class Target:
         self.discount_type = discount_type
         self.discount_param = discount_param
 
-    def compute_target(self, rew_time, rew_magn):
-        if self.discount_type == "hyperbolic":
-            return rew_magn * (1 / (1 + self.discount_param * rew_time))
-        elif self.discount_type == "delta":
-            return rew_time
+    def compute_target(self, rew_time):
+        return rew_time
 
-    def possible_targets(self, max_rew_time, max_rew_magn=6):
-        targets = []
-        if self.discount_type == "delta":
-            for t in range(max_rew_time):
-                targets.append(self.compute_target(t, 1))
-        else:
-            for t in range(max_rew_time):
-                for r in range(max_rew_magn):
-                    targets.append(self.compute_target(t, 1+r))
-        return targets
+    def possible_targets(self, max_rew_time):
+        return list(set(a * b for a, b in product(range(1, max_rew_time), repeat=2)))
 
 
-import pandas as pd
-import seaborn as sns
+
 
 def plot_performance(perf, gamma_experiments, title="", label=""):
     # Prepare data for seaborn
@@ -258,7 +239,7 @@ if __name__ == "__main__":
 
         print(f"------------- START EXPERIMENT {discount_type} -------------")
         gamma_experiments = np.array(
-            [[0.6, 0.9, 0.99], [0.6,0.6,0.9], [0.6,0.6,0.99], [0.9,0.9,0.99], [0.6, 0.6, 0.6], [0.9, 0.9, 0.9], [0.99, 0.99, 0.99] ]
+            [[0.6,0.7,0.9,0.95,0.99],[0.6, 0.9, 0.99], [0.6,0.6,0.9], [0.6,0.6,0.99], [0.9,0.9,0.99], [0.6, 0.6, 0.6], [0.9, 0.9, 0.9], [0.99, 0.99, 0.99] ]
         )
         target = Target(discount_type=discount_type)
 
@@ -268,15 +249,14 @@ if __name__ == "__main__":
             print(gammas)
             experiment = Trainable(
                 gammas=gammas,
-                total_time=15,
-                max_reward_magn=15,
+                total_time=5,
+                max_reward_magn=3,
                 target=target.compute_target,
-                possible_targets=target.possible_targets(max_rew_time=15,max_rew_magn=15),
+                possible_targets=target.possible_targets(max_rew_time=5),
             )
             performance_experiment[str(gammas)] = experiment.train(
                 noise_values=0,
-                epochs=1000,
-                random_reward=True,
+                epochs=2000,
                 noise_perceived_time=0,
                 min_num_td_steps=59,
                 max_num_td_steps=99
@@ -290,31 +270,12 @@ if __name__ == "__main__":
     # Load experiment:
     with open("experiment.pkl", "rb") as f:
         experiment = pickle.load(f)
-    # with open("delta.pkl", "rb") as f:
-    #     delta = pickle.load(f)
-    # with open("step.pkl", "rb") as f:
-    #     step = pickle.load(f)
 
     mean_perf = [np.mean(experiment[str(gammas)][-50:-1]) for gammas in gamma_experiments]
     gamma_plots = [
         str(gamma_experiments[4:8][np.argmax(mean_perf[4:8])]),
         str(gamma_experiments[1:4][np.argmax(mean_perf[1:4])]),
         '[0.6  0.9  0.99]']
-
-    fig = plot_performance(experiment, gamma_plots, label="experiment")
-    fig.savefig("random_magnitude.svg", bbox_inches="tight")
-
-# plt.figure(figsize=(4, 3))
-# t = np.linspace(0,10,1000)
-# plt.plot(t,1 / (1 + 0.9 * t),label="hyperbolic")
-# plt.plot(t,t==t[500], label="delta")
-# plt.plot(t,0.25*(t>t[250]), label="step")
-# plt.legend()
-# plt.ylabel('Value')
-# plt.xlabel('Time')
-# plt.title('Discounts')
-# plt.savefig("test.png", bbox_inches="tight")
-# plt.show()
 
 from scipy.signal import savgol_filter
 
@@ -333,7 +294,7 @@ def compute_error(values, window_size):
     return np.array(errors)
 
 
-
+from scipy.signal import savgol_filter
 import matplotlib.cm as cm
 
 unique_gamma_counts = [len(np.unique(exp)) for exp in gamma_experiments]
@@ -346,6 +307,8 @@ for unique_gamma_count in unique_gamma_counts:
         colors.append(cm.Greens)
     elif unique_gamma_count == 3:
         colors.append(cm.gray)
+    elif unique_gamma_count == 5:
+        colors.append(cm.Reds)
 
 window_size = 200
 plt.figure(figsize=(5, 4))
