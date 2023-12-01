@@ -24,7 +24,7 @@ The scripts are written for CPU, but execution times could improve if adapted to
 ## Software requirements
 ### OS Requirements
 The code has been tested on the following systems:
-+ macOS: Mojave (13.2.1)
++ macOS 13.2.1
 
 ## License
 This project is covered under the MIT License (see LICENSE file).
