@@ -1,4 +1,4 @@
-# multi_timescale_RL
+# Multi-timescale reinforcement learning in the brain
 
 The names of the files start with the figure that they reproduce.
 
