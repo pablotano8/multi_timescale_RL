@@ -1,0 +1,139 @@
+absl-py==1.4.0
+ale-py==0.7.4
+appnope==0.1.3
+asttokens==2.2.1
+astunparse==1.6.3
+AutoROM==0.6.1
+AutoROM.accept-rom-license==0.6.1
+backcall==0.2.0
+box2d-py==2.3.5
+brokenaxes==0.5.0
+brotlipy==0.7.0
+cachetools==5.3.1
+certifi @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_477u68wvzm/croot/certifi_1671487773341/work/certifi
+cffi @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_1b0qzba5nr/croot/cffi_1670423213150/work
+charset-normalizer @ file:///tmp/build/80754af9/charset-normalizer_1630003229654/work
+click==8.1.3
+cloudpickle==2.2.1
+contourpy==1.0.7
+cryptography @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_19cvzxmeb9/croot/cryptography_1677533085498/work
+cycler==0.11.0
+Cython==3.0.0
+decorator==5.1.1
+docopt==0.6.2
+executing==1.2.0
+Farama-Notifications==0.0.4
+fasteners==0.18
+flatbuffers==23.5.26
+flit_core @ file:///opt/conda/conda-bld/flit-core_1644941570762/work/source/flit_core
+fonttools==4.38.0
+gast==0.4.0
+glfw==2.6.2
+google-auth==2.20.0
+google-auth-oauthlib==1.0.0
+google-pasta==0.2.0
+grpcio==1.54.2
+gym==0.21.0
+gym-notices==0.0.8
+gym-wrappers==0.1.0
+h5py==3.9.0
+idna @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_00jf0h4zbt/croot/idna_1666125573348/work
+imageio==2.27.0
+importlib-metadata==4.13.0
+importlib-resources==5.12.0
+ipython==8.11.0
+jedi==0.18.2
+joblib==1.2.0
+keras==2.13.1
+keyboard==0.13.5
+kiwisolver==1.4.4
+lazy_loader==0.2
+libclang==16.0.6
+llvmlite==0.40.1
+lockfile==0.12.2
+lz4==4.3.2
+Markdown==3.4.3
+markdown-it-py==3.0.0
+MarkupSafe==2.1.3
+matplotlib==3.7.0
+matplotlib-inline==0.1.6
+mdurl==0.1.2
+mkl-fft==1.3.1
+mkl-random @ file:///opt/concourse/worker/volumes/live/a9eca864-069c-4240-73c8-4e51b036a10d/volume/mkl_random_1639994047876/work
+mkl-service==2.4.0
+module-wrapper==0.3.1
+mujoco-py==2.1.2.14
+networkx==3.1
+noise==1.2.2
+numba==0.57.1
+numpy==1.24.2
+oauthlib==3.2.2
+opencv-python==4.7.0.72
+opt-einsum==3.3.0
+packaging==23.0
+pandas==1.5.3
+parso==0.8.3
+pexpect==4.8.0
+pickleshare==0.7.5
+Pillow==9.4.0
+pipreqs==0.4.13
+prompt-toolkit==3.0.38
+protobuf==4.23.3
+psutil==5.9.5
+ptyprocess==0.7.0
+pure-eval==0.2.2
+pyasn1==0.5.0
+pyasn1-modules==0.3.0
+pybullet==3.2.5
+pycparser @ file:///tmp/build/80754af9/pycparser_1636541352034/work
+pygame==2.1.0
+pyglet==2.0.9
+Pygments==2.14.0
+pymunk==6.5.1
+pynndescent==0.5.10
+pynput==1.7.6
+pyobjc==9.2
+pyobjc-core==9.2
+PyOpenGL==3.1.7
+pyOpenSSL @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_6dweji2whw/croot/pyopenssl_1677607689781/work
+pyparsing==3.0.9
+PySocks @ file:///Users/builder/ci_310/pysocks_1642536366386/work
+python-dateutil==2.8.2
+pytz==2022.7.1
+PyWavelets==1.4.1
+requests @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_516b78ce-034d-4395-b9b5-1d78c2847384qtnol99l/croots/recipe/requests_1657734628886/work
+requests-oauthlib==1.3.1
+rich==13.4.2
+rsa==4.9
+sb3-contrib==1.8.0
+scikit-image==0.20.0
+scikit-learn==1.2.1
+scipy==1.10.1
+seaborn==0.12.2
+six @ file:///tmp/build/80754af9/six_1644875935023/work
+sklearn==0.0.post1
+stable-baselines3==1.8.0
+stack-data==0.6.2
+stdlib-list==0.8.0
+swig==4.1.1
+tensorboard==2.13.0
+tensorboard-data-server==0.7.1
+tensorflow==2.13.0
+tensorflow-estimator==2.13.0
+tensorflow-io-gcs-filesystem==0.33.0
+termcolor==2.3.0
+threadpoolctl==3.1.0
+tifffile==2023.4.12
+torch==1.13.1
+torchaudio==0.13.1
+torchvision==0.14.1
+tqdm==4.65.0
+traitlets==5.9.0
+typing_extensions @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_4b7xacf029/croot/typing_extensions_1669923792404/work
+umap-learn==0.5.3
+urllib3 @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_4cyi6_u2vj/croot/urllib3_1673575523861/work
+wcwidth==0.2.6
+Werkzeug==2.3.6
+wrapt==1.15.0
+yarg==0.1.9
+zipp==3.15.0
